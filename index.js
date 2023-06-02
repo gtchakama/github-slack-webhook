@@ -12,7 +12,7 @@ app.use(bodyParser.json());
 const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
 
 // Define the Slack channel to send messages to
-const slackChannel = '#github-george';
+const slackChannel = 'github-george';
 
 // Define the route that will receive the GitHub webhook payload
 app.post('/github-webhook', async (req, res) => {
