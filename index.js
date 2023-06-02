@@ -1,47 +1,73 @@
-// Import dependencies
-const { Octokit } = require("@octokit/rest");
-const dotenv = require('dotenv');
-const Slack = require('slack-node');
+const { IncomingWebhook } = require('@slack/webhook');
+const http = require('http');
+const createHandler = require('github-webhook-handler');
 
-// Load environment variables from .env file
-dotenv.config();
+const webhook = new IncomingWebhook('https://hooks.slack.com/services/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');
+const handler = createHandler({ path: '/webhook', secret: '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' });
 
-// Initialize Octokit REST client
-const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN,
-});
-
-// Initialize Slack client
-const slack = new Slack();
-slack.setWebhook(process.env.SLACK_WEBHOOK_URL);
-
-// Listen for pull request events on GitHub repo
-octokit.activity.listRepoEvents({
-    owner: 'gtchakama',
-    repo: 'gt-chakama',
-    per_page: 100 // Set the number of events to return
-}).then(result => {
-    const pullRequests = result.data.filter(event => event.type === "PullRequestEvent" && event.payload.action === "opened")
-    // Send messages to Slack for each new pull request
-    pullRequests.forEach(pullRequest => {
-        const message = `New Pull Request: ${pullRequest.payload.pull_request.title} - ${pullRequest.payload.pull_request.html_url}`;
-        sendSlackMessage(message);
-    });
-}).catch(err => {
-    console.error(`Error getting pull requests: ${err}`);
-});
-
-// Function to send messages to Slack
-function sendSlackMessage(message) {
-  slack.webhook({
-    text: message,
-    channel: "github-george",
-    username: "GitHub Pull Requests"
-  }, function(err, response) {
-    if (err) {
-      console.error(`Error sending message: ${err}`);
-    } else {
-      console.log(`Message sent: ${message}`);
-    }
+http.createServer(function (req, res) {
+  handler(req, res, function () {
+    res.statusCode = 404;
+    res.end('Not Found');
   });
-}
+}).listen(8080);
+
+handler.on('pull_request', function(event) {
+  const message = {
+    text: `New pull request from ${event.payload.sender.login}: ${event.payload.pull_request.title}`,
+    attachments: [
+      {
+        fallback: event.payload.pull_request.title,
+        title: event.payload.pull_request.title,
+        title_link: event.payload.pull_request.html_url,
+        color: "#36a64f",
+        fields: [
+          {
+            title: "Author",
+            value: event.payload.pull_request.user.login,
+            short: true
+          },
+          {
+            title: "Status",
+            value: event.payload.pull_request.state,
+            short: true
+          }
+        ]
+      }
+    ]
+  };
+
+  webhook.send(message)
+    .then(() => console.log('Message sent'))
+    .catch((error) => console.error(`Error sending message: ${error}`));
+});
+
+handler.on('push', function(event) {
+  const message = {
+    text: `New commit pushed to repo ${event.payload.repository.full_name}`,
+    attachments: [
+      {
+        fallback: event.payload.commits[0].message,
+        title: `${event.payload.commits.length} new commits`,
+        title_link: event.payload.compare,
+        color: "#36a64f",
+        fields: [
+          {
+            title: "Author",
+            value: event.payload.head_commit.author.username,
+            short: true
+          },
+          {
+            title: "Message",
+            value: event.payload.head_commit.message,
+            short: false
+          }
+        ]
+      }
+    ]
+  };
+
+  webhook.send(message)
+    .then(() => console.log('Message sent'))
+    .catch((error) => console.error(`Error sending message: ${error}`));
+});
